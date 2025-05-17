@@ -85,18 +85,14 @@ logging.basicConfig(
 )
 logging.Formatter.converter = time.gmtime # Use UTC in logs for consistency
 
-# ==============================================================================
-# --- Configuration --- VITAL: REVIEW AND TUNE THESE AGGRESSIVELY ---
-# ==============================================================================
+# Configuration 
 # !!! UPDATE URL IF NEEDED !!!
 BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico"
 
 # !!! SET YOUR TARGET DATE !!!
 TARGET_DATE = "2025-05-24"  # Format: YYYY-MM-DD
 ACTIVATION_TIME = "09:02:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
-# LOCAL_TIMEZONE = "America/New_York" # Less relevant if running on VPS in Europe
 ROME_TIMEZONE = "Europe/Rome"
-# DESIRED_SLOT_TIME_RM_FORMAT = "%I:%M %p" # Example: "09:00 AM" - Adjust format if needed
 
 # !!! SET REQUIRED TICKETS !!!
 FULL_PRICE_TICKETS = 1
@@ -105,7 +101,7 @@ REDUCED_PRICE_TICKETS = 1
 # !!! SET PREFERRED TOUR LANGUAGE !!!
 PREFERRED_LANGUAGE = "ENGLISH"  # Options: "ENGLISH", "ITALIAN", "SPANISH", "FRENCH"
 
-# --- Timing Configuration (CRITICAL FOR SPEED) ---
+# Timing Configuration (CRITICAL FOR SPEED) ---
 # How many seconds BEFORE Activation Time to START the micro-refresh loop
 # Adjust based on observation: If slots appear slightly early, increase this.
 # If they appear exactly on time or slightly late, keep it low.
@@ -124,8 +120,8 @@ POST_REFRESH_CONTAINER_TIMEOUT = 1.5 # seconds
 # Interval between checks WITHIN the fast loop if tickets not found yet (VERY LOW)
 FAST_CHECK_INTERVAL = 0.05  # Check every 50ms, adjust 0.03 <-> 0.1
 
-# --- Delays WITHIN successful steps (MINIMIZE THESE) ---
-# *** TEST THESE LOW VALUES - INCREASE SLIGHTLY IF SCRIPT BREAKS ***
+# Delays WITHIN successful steps (MINIMIZE THESE)
+# TEST THESE LOW VALUES - INCREASE SLIGHTLY IF SCRIPT BREAKS
 DELAY_AFTER_SLOT_CLICK = 0.05  # Minimal pause for ticket options to render
 DELAY_BETWEEN_QTY_SET = 0.02   # Minimal pause between Full/Reduced
 DELAY_BETWEEN_PLUS_CLICKS = 0.03 # Minimal pause between clicks
@@ -140,9 +136,9 @@ MAX_FAST_CHECK_ATTEMPTS = 400
 # Timeout for waits *within* the fast loop (after container found) - keep short
 FAST_LOOP_WAIT_TIMEOUT = 0.75 # seconds
 
-# ==============================================================================
-# --- Multilingual Text Mappings (Keep as is or update) ---
-# ==============================================================================
+
+# Multilingual Text Mappings
+
 TEXT_MAPPINGS = {
     "english": {"full_price": "Full price", "reduced_fare": "Reduced fare", "continue": "CONTINUE", "activity_in": "ACTIVITY IN"},
     "italian": {"full_price": "Prezzo intero", "reduced_fare": "Tariffa ridotta", "continue": "CONTINUA", "activity_in": "ATTIVITÀ IN"},
@@ -154,9 +150,8 @@ LANGUAGE_MAPPINGS = {
      # Add spanish/french if needed
 }
 
-# ==============================================================================
-# --- CSS / XPATH Selectors (VERIFY THESE AGAINST LIVE SITE!) ---
-# ==============================================================================
+# CSS / XPATH Selectors (VERIFY THESE AGAINST LIVE SITE!)
+
 # Choose the container that appears *first* and most reliably holds the slots/tickets
 PRIMARY_CONTAINER_SELECTOR = "div.abc-slotpicker-group" # Likely holds the time slots
 # PRIMARY_CONTAINER_SELECTOR = "div.abc-tariffpicker" # If ticket types appear before/without slots
@@ -164,14 +159,12 @@ PRIMARY_CONTAINER_SELECTOR = "div.abc-slotpicker-group" # Likely holds the time 
 # --- Time Slot Selectors ---
 TIME_SLOT_CONTAINER_SELECTOR = "div.abc-slotpicker-group"
 # Example: Direct XPath targeting label under specific header and with specific time
-# Adapt LANGUAGE and TIME dynamically later. This is just a structural example.
 # DIRECT_SLOT_XPATH_TEMPLATE = "//h3[contains(@class, 'lang_section')][contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{lang_text}')]/following-sibling::label[not(contains(@class, 'unselectable'))][descendant::input[@type='radio' and not(@disabled)]][.//span[normalize-space(text())='{time_text}']]"
 AVAILABLE_SLOT_LABEL_XPATH = ".//label[not(contains(@class, 'unselectable'))][descendant::input[@type='radio' and @name='slot' and not(@disabled)]]"
 SLOT_TIME_TEXT_XPATH = ".//div/span" # Relative to the label
 
 # --- Ticket Quantity Selectors ---
 TICKET_TYPE_CONTAINER_SELECTOR = "div.abc-tariffpicker"
-# More specific selector for plus button if possible (check attributes like data-type, aria-label)
 TICKET_PLUS_BTN_SELECTOR = "button.plus, button > span.fa-plus" # Check if this is unique enough
 # Find the row containing the ticket type text first:
 TICKET_ROW_XPATH_TEMPLATE = ".//div[contains(@class, 'tariff-option')][.//span[contains(@class, 'title')][translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') = '{}']]"
@@ -179,9 +172,9 @@ TICKET_ROW_XPATH_TEMPLATE = ".//div[contains(@class, 'tariff-option')][.//span[c
 # --- Continue Button ---
 CONTINUE_BUTTON_SELECTOR = "a#buy-button" # Check if ID is reliable
 
-# ==============================================================================
-# --- ColosseumTicketBot Class ---
-# ==============================================================================
+
+#ColosseumTicketBot Class
+
 class ColosseumTicketBot:
     def __init__(self):
         self.driver = None
@@ -777,9 +770,7 @@ class ColosseumTicketBot:
             finally:
                  self.driver = None
 
-# ==============================================================================
-# --- Main Execution Block ---
-# ==============================================================================
+# Main Execution Block
 if __name__ == "__main__":
     # === CRITICAL PRE-RUN CHECKS ===
     logging.warning("="*70)
