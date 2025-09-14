@@ -7,6 +7,19 @@ import pytz
 import re
 import math
 
+
+# --- Set up logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s.%(msecs)03d - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', # Added milliseconds
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler("ticket_bot.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logging.Formatter.converter = time.gmtime # Use UTC in logs for consistency
+
 # --- Use undetected_chromedriver if available ---
 try:
     import undetected_chromedriver as uc
@@ -72,18 +85,6 @@ def precise_wait_until(target_datetime):
 # --- Sound Notification Handling ---
 # (Keep your existing sound code here if needed)
 # ...
-
-# --- Set up logging ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s.%(msecs)03d - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', # Added milliseconds
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        logging.FileHandler("ticket_bot.log", encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logging.Formatter.converter = time.gmtime # Use UTC in logs for consistency
 
 # Configuration 
 # !!! UPDATE URL IF NEEDED !!!
@@ -216,7 +217,7 @@ class ColosseumTicketBot:
                 options.add_argument('--disable-logging')
                 options.add_argument('--log-level=3')
                 options.add_experimental_option("prefs", {"intl.accept_languages": "en,en_US"})
-                self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=119) # Specify version if needed
+                self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=140) # Specify version if needed
             else:
                 # Standard Selenium setup (less likely to bypass detection)
                 chrome_options = Options()
