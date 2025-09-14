@@ -1,4 +1,5 @@
 import time
+import os
 import random
 import logging
 from datetime import datetime, timedelta
@@ -7,13 +8,37 @@ import pytz
 import re
 import math
 
+# --- Logging Setup ---
+
+# !!! UPDATE folder IF NEEDED !!!
+LOGS_DIR = "C:/temp/Logs"
+LOGS_FILE = "ticket_bot.log"
+
+# If folder doesn't exist, exit with error
+if not os.path.exists(LOGS_DIR):
+    print(f"ERROR: Logs directory '{LOGS_DIR}' does not exist. Please create it and ensure write permissions.")
+    sys.exit(1)
+
+# --- Set up logging ---
+logging.basicConfig(
+    level=logging.INFO,    # Set to INFO for less verbosity, DEBUG for detailed trace
+    format='%(asctime)s.%(msecs)03d - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', # Added milliseconds
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(os.path.join(LOGS_DIR, LOGS_FILE), encoding='utf-8'),
+        logging.StreamHandler(stream=sys.stdout)
+    ]
+)
+logging.Formatter.converter = time.gmtime # Use UTC in logs for consistency
+
+
 # --- Use undetected_chromedriver if available ---
 try:
     import undetected_chromedriver as uc
     USE_UNDETECTED = True
-    logging.info("undetected-chromedriver library found.")
+    logging.info("undetected-chromedriver library found.")    # Calling the logging functions before basicConfig results in basicConfig not being effective
 except ImportError:
-    logging.warning("undetected-chromedriver library not found. Falling back to standard Selenium.")
+    logging.warning("undetected-chromedriver library not found. Falling back to standard Selenium.")        # Calling the logging functions before basicConfig results in basicConfig not being effective
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.chrome.options import Options
@@ -65,7 +90,7 @@ def precise_wait_until(target_datetime):
         if wait_seconds <= 0:
             break
         # Sleep granularity depends on OS, but aim for small sleeps
-        sleep_duration = max(0.001, min(0.01, wait_seconds / 2.0)) # Adaptive sleep
+        sleep_duration = max(0.001, min(0.01, wait_seconds / 2.0)) # Adaptive sleep (less as we get closer to target_datetime)
         time.sleep(sleep_duration)
 
 
@@ -73,30 +98,26 @@ def precise_wait_until(target_datetime):
 # (Keep your existing sound code here if needed)
 # ...
 
-# --- Set up logging ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s.%(msecs)03d - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', # Added milliseconds
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        logging.FileHandler("ticket_bot.log", encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logging.Formatter.converter = time.gmtime # Use UTC in logs for consistency
 
 # Configuration 
 # !!! UPDATE URL IF NEEDED !!!
-BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico"
+# For individual 24h Colosseum tickets (you can use this for testing, it has more frequent slots):
+BASE_URL = "https://ticketing.colosseo.it/en/eventi/24h-colosseo-foro-romano-palatino"
+# For Full Experience (Underground + Arena) educational tour:
+# BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico"
+
+# !!! UPDATE CHROME_VERSION !!!
+CHROME_VERSION = 140
 
 # !!! SET YOUR TARGET DATE !!!
-TARGET_DATE = "2025-05-24"  # Format: YYYY-MM-DD
-ACTIVATION_TIME = "09:02:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
+TARGET_DATE = "2025-10-14"  # Format: YYYY-MM-DD
+ACTIVATION_DATE = "2025-09-14"
+ACTIVATION_TIME = "13:30:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
 ROME_TIMEZONE = "Europe/Rome"
 
 # !!! SET REQUIRED TICKETS !!!
-FULL_PRICE_TICKETS = 1
-REDUCED_PRICE_TICKETS = 1
+FULL_PRICE_TICKETS = 2
+REDUCED_PRICE_TICKETS = 2
 
 # !!! SET PREFERRED TOUR LANGUAGE !!!
 PREFERRED_LANGUAGE = "ENGLISH"  # Options: "ENGLISH", "ITALIAN", "SPANISH", "FRENCH"
@@ -110,22 +131,30 @@ MICRO_REFRESH_LEAD_TIME_SECONDS = 0.8
 # Duration of the micro-refresh window around activation time
 # Aim for a tight window covering the likely drop moment.
 MICRO_REFRESH_DURATION_BEFORE = 0.5 # Seconds BEFORE activation time
-MICRO_REFRESH_DURATION_AFTER = 0.7  # Seconds AFTER activation time
+# MICRO_REFRESH_DURATION_AFTER = 0.7  # Seconds AFTER activation time
+MICRO_REFRESH_DURATION_AFTER = 10  # Seconds AFTER activation time
 # Interval between JS reloads during the micro-refresh window (VERY LOW)
-MICRO_REFRESH_INTERVAL = 0.075 # Try 75ms, adjust 0.05 <-> 0.1
+# MICRO_REFRESH_INTERVAL = 0.075 # Try 75ms, adjust 0.05 <-> 0.1
+MICRO_REFRESH_INTERVAL = 0.250 # Try 75ms, adjust 0.05 <-> 0.1
 
 # Max time to wait for the main content container after a successful micro-refresh (Short)
 POST_REFRESH_CONTAINER_TIMEOUT = 1.5 # seconds
 
 # Interval between checks WITHIN the fast loop if tickets not found yet (VERY LOW)
-FAST_CHECK_INTERVAL = 0.05  # Check every 50ms, adjust 0.03 <-> 0.1
+# FAST_CHECK_INTERVAL = 0.05  # Check every 50ms, adjust 0.03 <-> 0.1
+FAST_CHECK_INTERVAL = 0.2  # Check every 200ms
 
 # Delays WITHIN successful steps (MINIMIZE THESE)
-# TEST THESE LOW VALUES - INCREASE SLIGHTLY IF SCRIPT BREAKS
-DELAY_AFTER_SLOT_CLICK = 0.05  # Minimal pause for ticket options to render
-DELAY_BETWEEN_QTY_SET = 0.02   # Minimal pause between Full/Reduced
-DELAY_BETWEEN_PLUS_CLICKS = 0.03 # Minimal pause between clicks
-DELAY_AFTER_QTY_SET = 0.05   # Minimal pause for Continue button state
+# TEST THESE LOW VALUES - INCREASE SLIGHTLY WITH INCREASE_FACTOR IF SCRIPT BREAKS
+INCREASE_FACTOR = 10 # Factor to increase delays if needed for stability
+DELAY_AFTER_SLOT_CLICK_BASE = 0.05  # Minimal pause for ticket options to render
+DELAY_AFTER_SLOT_CLICK = DELAY_AFTER_SLOT_CLICK_BASE * INCREASE_FACTOR
+DELAY_BETWEEN_QTY_SET_BASE = 0.02   # Minimal pause between Full/Reduced
+DELAY_BETWEEN_QTY_SET = DELAY_BETWEEN_QTY_SET_BASE * INCREASE_FACTOR
+DELAY_BETWEEN_PLUS_CLICKS_BASE = 0.03 # Minimal pause between clicks
+DELAY_BETWEEN_PLUS_CLICKS = DELAY_BETWEEN_PLUS_CLICKS_BASE * INCREASE_FACTOR
+DELAY_AFTER_QTY_SET_BASE = 0.05   # Minimal pause for Continue button state
+DELAY_AFTER_QTY_SET = DELAY_AFTER_QTY_SET_BASE * INCREASE_FACTOR
 DELAY_AFTER_CONTINUE = 1.5   # Needs to be slightly longer for potential page transition/API call
 
 # Max attempts within the FAST CHECK loop (Defines the fast check window duration)
@@ -136,9 +165,7 @@ MAX_FAST_CHECK_ATTEMPTS = 400
 # Timeout for waits *within* the fast loop (after container found) - keep short
 FAST_LOOP_WAIT_TIMEOUT = 0.75 # seconds
 
-
 # Multilingual Text Mappings
-
 TEXT_MAPPINGS = {
     "english": {"full_price": "Full price", "reduced_fare": "Reduced fare", "continue": "CONTINUE", "activity_in": "ACTIVITY IN"},
     "italian": {"full_price": "Prezzo intero", "reduced_fare": "Tariffa ridotta", "continue": "CONTINUA", "activity_in": "ATTIVITÀ IN"},
@@ -156,6 +183,8 @@ LANGUAGE_MAPPINGS = {
 PRIMARY_CONTAINER_SELECTOR = "div.abc-slotpicker-group" # Likely holds the time slots
 # PRIMARY_CONTAINER_SELECTOR = "div.abc-tariffpicker" # If ticket types appear before/without slots
 
+AFTER_REFRESH_IMMEDIATE_CHECK = True    # I found some issues when setting this to True
+
 # --- Time Slot Selectors ---
 TIME_SLOT_CONTAINER_SELECTOR = "div.abc-slotpicker-group"
 # Example: Direct XPath targeting label under specific header and with specific time
@@ -166,15 +195,14 @@ SLOT_TIME_TEXT_XPATH = ".//div/span" # Relative to the label
 # --- Ticket Quantity Selectors ---
 TICKET_TYPE_CONTAINER_SELECTOR = "div.abc-tariffpicker"
 TICKET_PLUS_BTN_SELECTOR = "button.plus, button > span.fa-plus" # Check if this is unique enough
+# TICKET_PLUS_BTN_SELECTOR = "span.fa.fa-plus"
 # Find the row containing the ticket type text first:
 TICKET_ROW_XPATH_TEMPLATE = ".//div[contains(@class, 'tariff-option')][.//span[contains(@class, 'title')][translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') = '{}']]"
 
 # --- Continue Button ---
 CONTINUE_BUTTON_SELECTOR = "a#buy-button" # Check if ID is reliable
 
-
-#ColosseumTicketBot Class
-
+# ColosseumTicketBot Class
 class ColosseumTicketBot:
     def __init__(self):
         self.driver = None
@@ -192,7 +220,8 @@ class ColosseumTicketBot:
         """Calculates the target activation datetime in Rome time."""
         try:
             # Combine target date with activation time string
-            activation_naive = datetime.strptime(f"{TARGET_DATE} {ACTIVATION_TIME}", "%Y-%m-%d %H:%M:%S")
+            # activation_naive = datetime.strptime(f"{TARGET_DATE} {ACTIVATION_TIME}", "%Y-%m-%d %H:%M:%S")
+            activation_naive = datetime.strptime(f"{ACTIVATION_DATE} {ACTIVATION_TIME}", "%Y-%m-%d %H:%M:%S")
             # Localize to Rome timezone
             return self.rome_tz.localize(activation_naive)
         except ValueError as e:
@@ -216,7 +245,7 @@ class ColosseumTicketBot:
                 options.add_argument('--disable-logging')
                 options.add_argument('--log-level=3')
                 options.add_experimental_option("prefs", {"intl.accept_languages": "en,en_US"})
-                self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=119) # Specify version if needed
+                self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=CHROME_VERSION) # Specify version if needed
             else:
                 # Standard Selenium setup (less likely to bypass detection)
                 chrome_options = Options()
@@ -239,6 +268,8 @@ class ColosseumTicketBot:
             self.driver.set_page_load_timeout(15) # Timeout for initial page loads
             # Consider setting implicit wait low globally, but explicit waits are generally better
             # self.driver.implicitly_wait(0.5)
+            # Trying to fix timeout issues with JS reload
+            self.driver.set_script_timeout(10)
         except WebDriverException as e:
             logging.error(f"WebDriver setup failed: {e}", exc_info=True)
             if "permission denied" in str(e).lower():
@@ -344,9 +375,9 @@ class ColosseumTicketBot:
             return False
 
         print("-" * 60)
-        logging.info(">>> ACTION REQUIRED: Check browser NOW!")
-        logging.info(">>> 1. Solve any CAPTCHA / Cloudflare checks IMMEDIATELY.")
-        logging.info(">>> 2. Wait for main ticket selection elements to appear.")
+        logging.warning(">>> ACTION REQUIRED: Check browser NOW!")
+        logging.warning(">>> 1. Solve any CAPTCHA / Cloudflare checks IMMEDIATELY.")
+        logging.warning(">>> 2. Wait for main ticket selection elements to appear.")
         input(">>> 3. Once page seems ready, press Enter here FAST...")
         print("-" * 60)
         logging.info("Resuming automation...")
@@ -488,7 +519,7 @@ class ColosseumTicketBot:
                     ticket_row = WebDriverWait(ticket_container, 0.2, 0.05).until(
                         EC.presence_of_element_located((By.XPATH, row_xpath))
                     )
-
+                    logging.info(f"Setting {num_tickets} x '{ticket_display_text_lower}').")
                     # Find the plus button within this row
                     plus_button = WebDriverWait(ticket_row, 0.1, 0.05).until(
                          EC.presence_of_element_located((By.CSS_SELECTOR, TICKET_PLUS_BTN_SELECTOR))
@@ -512,12 +543,10 @@ class ColosseumTicketBot:
                 except Exception as e_inner:
                     logging.error(f"Error in set_quantity for '{ticket_text_key}': {e_inner}", exc_info=False)
                     return False
-
             # Set quantities, pausing briefly between types
             if not set_quantity("full_price", FULL_PRICE_TICKETS): return False
             time.sleep(DELAY_BETWEEN_QTY_SET)
             if not set_quantity("reduced_fare", REDUCED_PRICE_TICKETS): return False
-
             time.sleep(DELAY_AFTER_QTY_SET) # Pause after setting all
             return True
 
@@ -577,10 +606,12 @@ class ColosseumTicketBot:
 
                      # VERY quick check for container presence immediately after reload
                      # Don't wait long here, just see if it appeared *instantly*
-                     if self.quick_check_element(By.CSS_SELECTOR, PRIMARY_CONTAINER_SELECTOR, timeout=0.1):
-                         logging.info(f"*** Primary container FOUND during micro-refresh at {now_dt.strftime('%H:%M:%S.%f')[:-3]}! ***")
-                         container_found = True
-                         break # Exit micro-refresh loop immediately
+                     # Introduced this switch, since I get an error if performing the quick check ("Container found during micro-refresh, but disappeared or timed out confirming visibility")
+                     if AFTER_REFRESH_IMMEDIATE_CHECK:
+                        if self.quick_check_element(By.CSS_SELECTOR, PRIMARY_CONTAINER_SELECTOR, timeout=0.1):
+                            logging.info(f"*** Primary container FOUND during micro-refresh at {now_dt.strftime('%H:%M:%S.%f')[:-3]}! ***")
+                            container_found = True
+                            break # Exit micro-refresh loop immediately
                 else:
                      # Reload failed, wait briefly before trying again
                      time.sleep(0.1)
@@ -749,10 +780,10 @@ class ColosseumTicketBot:
         if not self.driver: return
         try:
             filename = f"{filename_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]}.png"
-            if self.driver.save_screenshot(filename):
-                logging.info(f"Saved screenshot: {filename}")
+            if self.driver.save_screenshot(os.path.join(LOGS_DIR, filename)):
+                logging.info(f"Saved screenshot: {os.path.join(LOGS_DIR, filename)}")
             else:
-                logging.warning(f"Call to save_screenshot for '{filename}' returned False.")
+                logging.warning(f"Call to save_screenshot for '{os.path.join(LOGS_DIR, filename)}' returned False.")
         except Exception as e:
             logging.error(f"Could not save screenshot '{filename_prefix}': {e}")
 
@@ -772,6 +803,7 @@ class ColosseumTicketBot:
 
 # Main Execution Block
 if __name__ == "__main__":
+    logging.info("Starting Colosseum Ticket Bot Script")
     # === CRITICAL PRE-RUN CHECKS ===
     logging.warning("="*70)
     logging.warning(" VERY IMPORTANT: ")
@@ -780,7 +812,7 @@ if __name__ == "__main__":
     logging.warning(" 3. DOUBLE-CHECK ALL CSS/XPATH SELECTORS AGAINST THE LIVE WEBSITE!")
     logging.warning(" 4. TEST THE AGGRESSIVE TIMINGS (DELAYS, INTERVALS) BEFORE A REAL DROP.")
     logging.warning("="*70)
-    time.sleep(4) # Give user time to read warnings
+    # time.sleep(4) # Uncomment to give user time to read warnings
 
     bot = ColosseumTicketBot() # Initialization calculates activation time etc.
     final_status = False
@@ -788,6 +820,7 @@ if __name__ == "__main__":
         logging.info("="*60 + "\n Starting Optimized Ticket Bot \n" + "="*60)
         # Log key configurations
         logging.info(f" Target Date: {TARGET_DATE}")
+        logging.info(f" Activation Date: {ACTIVATION_DATE}")
         logging.info(f" Activation Time (Rome): {ACTIVATION_TIME}")
         logging.info(f" Desired Slot Match: '{bot.desired_slot_time_str}' ({PREFERRED_LANGUAGE})")
         logging.info(f" Tickets: {FULL_PRICE_TICKETS} Full / {REDUCED_PRICE_TICKETS} Reduced")
