@@ -2,3 +2,4 @@ selenium
 undetected-chromedriver
 webdriver-manager
 setuptools
+pytz
