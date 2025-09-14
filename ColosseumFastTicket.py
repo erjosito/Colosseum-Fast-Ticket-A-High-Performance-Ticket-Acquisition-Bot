@@ -91,8 +91,8 @@ def precise_wait_until(target_datetime):
 BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico"
 
 # !!! SET YOUR TARGET DATE !!!
-TARGET_DATE = "2025-05-24"  # Format: YYYY-MM-DD
-ACTIVATION_TIME = "09:02:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
+TARGET_DATE = "2025-10-15"  # Format: YYYY-MM-DD
+ACTIVATION_TIME = "09:00:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
 ROME_TIMEZONE = "Europe/Rome"
 
 # !!! SET REQUIRED TICKETS !!!
