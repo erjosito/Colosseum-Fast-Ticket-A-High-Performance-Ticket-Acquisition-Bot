@@ -1,8 +1,8 @@
+from datetime import datetime, timedelta
 import time
 import os
 import random
 import logging
-from datetime import datetime, timedelta
 import sys
 import pytz
 import re
@@ -13,15 +13,13 @@ import math
 # !!! UPDATE folder IF NEEDED !!!
 LOGS_DIR = "C:/temp/Logs"
 LOGS_FILE = "ticket_bot.log"
-
 # If folder doesn't exist, exit with error
 if not os.path.exists(LOGS_DIR):
     print(f"ERROR: Logs directory '{LOGS_DIR}' does not exist. Please create it and ensure write permissions.")
     sys.exit(1)
-
 # --- Set up logging ---
 logging.basicConfig(
-    level=logging.DEBUG,    # Set to INFO/WARNING for less verbosity, DEBUG for detailed trace
+    level=logging.INFO,    # Set to INFO/WARNING for less verbosity, DEBUG for detailed trace
     format='%(asctime)s.%(msecs)03d - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', # Added milliseconds
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
@@ -64,7 +62,9 @@ def js_reload(driver):
     """Reload the page using JavaScript for speed and reliability."""
     try:
         driver.execute_script("window.location.reload(true);") # Force cache bypass  # Timeout errors with this line
-        # driver.navigate().refresh()  "'navigate' method not found" error
+        # Use evaluate_script instead??
+        # driver.navigate().refresh()  # 'navigate' method not found
+        # driver.refresh()  # ????
         return True
     except Exception as e:
         logging.error(f"JavaScript reload failed: {e}")
@@ -94,6 +94,34 @@ def precise_wait_until(target_datetime):
         sleep_duration = max(0.001, min(0.01, wait_seconds / 2.0)) # Adaptive sleep (less as we get closer to target_datetime)
         time.sleep(sleep_duration)
 
+def next_underground_time():
+    """Return the time (HH:MM:SS) and language (ENGLISH/FRENCH/etc) of the next Colosseum Arena + Sotterrani event"""
+    event_times = [
+        {"time": "09:30", "language": "ENGLISH"},
+        {"time": "10:00", "language": "ENGLISH"},
+        {"time": "10:45", "language": "FRENCH"},
+        {"time": "11:00", "language": "ENGLISH"},
+        {"time": "11:30", "language": "SPANISH"},
+        {"time": "11:45", "language": "ENGLISH"},
+        {"time": "12:30", "language": "ITALIAN"},
+        {"time": "13:15", "language": "ENGLISH"},
+        {"time": "14:00", "language": "ENGLISH"},
+        {"time": "14:30", "language": "SPANISH"},
+        {"time": "15:00", "language": "ENGLISH"},
+        {"time": "15:30", "language": "FRENCH"},
+        {"time": "15:50", "language": "ENGLISH"},
+    ]
+    # Get current time in Roma TZ
+    rome_tz = pytz.timezone('Europe/Berlin')
+    current_time = datetime.now(rome_tz)
+    today_date_str = current_time.strftime("%Y-%m-%d")
+    # Find hte next event
+    for event_time_obj in event_times:
+        event_time = datetime.strptime(today_date_str + " " + event_time_obj['time'], '%Y-%m-%d %H:%M').replace(tzinfo=current_time.tzinfo)
+        if event_time > current_time:
+            return event_time_obj['time'] + ':00', event_time_obj['language']
+    # If couldn't find any date, it is probably too late in hte day
+    return None
 
 # --- Sound Notification Handling ---
 # (Keep your existing sound code here if needed)
@@ -104,16 +132,23 @@ def precise_wait_until(target_datetime):
 # !!! UPDATE URL IF NEEDED !!!
 # For individual 24h Colosseum tickets (you can use this for testing, it has more frequent slots):
 # BASE_URL = "https://ticketing.colosseo.it/en/eventi/24h-colosseo-foro-romano-palatino"
+# 24h only areana
+BASE_URL = "https://ticketing.colosseo.it/en/eventi/24h-only-arena"
+# For Full Experience (Arena):
+# BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience"
+# For Full Experience (Attico + Arena):
+# BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-attico"
 # For Full Experience (Underground + Arena) educational tour:
-BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico"
+# BASE_URL = "https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico"
 
 # !!! UPDATE CHROME_VERSION !!!
 CHROME_VERSION = 140
 
 # !!! SET YOUR TARGET DATE !!!
-TARGET_DATE = "2025-10-15"  # Format: YYYY-MM-DD
-ACTIVATION_DATE = "2025-09-14"
-ACTIVATION_TIME = "18:17:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
+TARGET_DATE = "2025-11-01"  # Format: YYYY-MM-DD
+TARGET_TIME = "13:00:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
+ACTIVATION_DATE = "2025-10-03"
+ACTIVATION_TIME = "03:00:00"  # Example: 9:00:00 AM Rome time (Ensure this is ROME TIME)
 ROME_TIMEZONE = "Europe/Rome"
 
 # !!! SET REQUIRED TICKETS !!!
@@ -121,7 +156,13 @@ FULL_PRICE_TICKETS = 2
 REDUCED_PRICE_TICKETS = 2
 
 # !!! SET PREFERRED TOUR LANGUAGE !!!
-PREFERRED_LANGUAGE = "ENGLISH"  # Options: "ENGLISH", "ITALIAN", "SPANISH", "FRENCH"
+PREFERRED_LANGUAGE = "FRENCH"  # Options: "ENGLISH", "ITALIAN", "SPANISH", "FRENCH"
+
+# Dynamic times if going for the Full Experience Underground
+if BASE_URL == 'https://ticketing.colosseo.it/en/eventi/full-experience-sotterranei-e-arena-percorso-didattico':
+    TARGET_TIME, PREFERRED_LANGUAGE = next_underground_time()
+    ACTIVATION_TIME = TARGET_TIME
+    ACTIVATION_DATE = datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d")
 
 # Timing Configuration (CRITICAL FOR SPEED) ---
 # How many seconds BEFORE Activation Time to START the micro-refresh loop
@@ -132,30 +173,31 @@ MICRO_REFRESH_LEAD_TIME_SECONDS = 0.8
 # Duration of the micro-refresh window around activation time
 # Aim for a tight window covering the likely drop moment.
 MICRO_REFRESH_DURATION_BEFORE = 0.5 # Seconds BEFORE activation time
-# MICRO_REFRESH_DURATION_AFTER = 0.7  # Seconds AFTER activation time
-MICRO_REFRESH_DURATION_AFTER = 10  # Seconds AFTER activation time
+MICRO_REFRESH_DURATION_AFTER = 1.0  # Seconds AFTER activation time
 # Interval between JS reloads during the micro-refresh window (VERY LOW)
-# MICRO_REFRESH_INTERVAL = 0.075 # Try 75ms, adjust 0.05 <-> 0.1
-MICRO_REFRESH_INTERVAL = 0.250 # Try 75ms, adjust 0.05 <-> 0.1
+MICRO_REFRESH_INTERVAL = 0.075 # Try 75ms, adjust 0.05 <-> 0.1
 
 # Max time to wait for the main content container after a successful micro-refresh (Short)
 POST_REFRESH_CONTAINER_TIMEOUT = 1.5 # seconds
 
 # Interval between checks WITHIN the fast loop if tickets not found yet (VERY LOW)
-# FAST_CHECK_INTERVAL = 0.05  # Check every 50ms, adjust 0.03 <-> 0.1
-FAST_CHECK_INTERVAL = 0.2  # Check every 200ms
+FAST_CHECK_INTERVAL = 0.05  # Check every 50ms, adjust 0.03 <-> 0.1
 
 # Delays WITHIN successful steps (MINIMIZE THESE)
 # TEST THESE LOW VALUES - INCREASE SLIGHTLY WITH INCREASE_FACTOR IF SCRIPT BREAKS
-INCREASE_FACTOR = 10 # Factor to increase delays if needed for stability
+INCREASE_FACTOR = 8 # Factor to increase some delays for stability
 DELAY_AFTER_SLOT_CLICK_BASE = 0.05  # Minimal pause for ticket options to render
-DELAY_AFTER_SLOT_CLICK = DELAY_AFTER_SLOT_CLICK_BASE * INCREASE_FACTOR
+# DELAY_AFTER_SLOT_CLICK = DELAY_AFTER_SLOT_CLICK_BASE * INCREASE_FACTOR
+DELAY_AFTER_SLOT_CLICK = DELAY_AFTER_SLOT_CLICK_BASE
 DELAY_BETWEEN_QTY_SET_BASE = 0.02   # Minimal pause between Full/Reduced
-DELAY_BETWEEN_QTY_SET = DELAY_BETWEEN_QTY_SET_BASE * INCREASE_FACTOR
+# DELAY_BETWEEN_QTY_SET = DELAY_BETWEEN_QTY_SET_BASE * INCREASE_FACTOR
+DELAY_BETWEEN_QTY_SET = DELAY_BETWEEN_QTY_SET_BASE
 DELAY_BETWEEN_PLUS_CLICKS_BASE = 0.03 # Minimal pause between clicks
 DELAY_BETWEEN_PLUS_CLICKS = DELAY_BETWEEN_PLUS_CLICKS_BASE * INCREASE_FACTOR
+# DELAY_BETWEEN_PLUS_CLICKS = DELAY_BETWEEN_PLUS_CLICKS_BASE
 DELAY_AFTER_QTY_SET_BASE = 0.05   # Minimal pause for Continue button state
 DELAY_AFTER_QTY_SET = DELAY_AFTER_QTY_SET_BASE * INCREASE_FACTOR
+# DELAY_AFTER_QTY_SET = DELAY_AFTER_QTY_SET_BASE
 DELAY_AFTER_CONTINUE = 1.5   # Needs to be slightly longer for potential page transition/API call
 
 # Max attempts within the FAST CHECK loop (Defines the fast check window duration)
@@ -184,8 +226,6 @@ LANGUAGE_MAPPINGS = {
 PRIMARY_CONTAINER_SELECTOR = "div.abc-slotpicker-group" # Likely holds the time slots
 # PRIMARY_CONTAINER_SELECTOR = "div.abc-tariffpicker" # If ticket types appear before/without slots
 
-AFTER_REFRESH_IMMEDIATE_CHECK = True    # I found some issues when setting this to True
-
 # --- Time Slot Selectors ---
 TIME_SLOT_CONTAINER_SELECTOR = "div.abc-slotpicker-group"
 # Example: Direct XPath targeting label under specific header and with specific time
@@ -212,7 +252,8 @@ class ColosseumTicketBot:
         self.rome_tz = pytz.timezone(ROME_TIMEZONE)
         self.target_date_dt = datetime.strptime(TARGET_DATE, "%Y-%m-%d").date()
         self.activation_dt_rome = self._calculate_activation_dt()
-        self.desired_slot_time_str = self.activation_dt_rome.strftime("%#I:%M %p" if sys.platform != 'win32' else "%#I:%M %p").strip() # Format like "9:00 AM" - adjust format code if needed
+        self.target_dt_rome = self._calculate_target_dt()
+        self.desired_slot_time_str = self.target_dt_rome.strftime("%#I:%M %p" if sys.platform != 'win32' else "%#I:%M %p").strip() # Format like "9:00 AM" - adjust format code if needed
         logging.info(f"Target Rome Activation: {self.activation_dt_rome.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} Rome Time")
         logging.info(f"Desired Slot Text (Exact Match Target): '{self.desired_slot_time_str}'")
         logging.info("ColosseumTicketBot initialized.")
@@ -226,7 +267,19 @@ class ColosseumTicketBot:
             # Localize to Rome timezone
             return self.rome_tz.localize(activation_naive)
         except ValueError as e:
-            logging.critical(f"Error parsing TARGET_DATE ('{TARGET_DATE}') or ACTIVATION_TIME ('{ACTIVATION_TIME}'): {e}")
+            logging.critical(f"Error parsing TARGET_DATE ('{ACTIVATION_DATE}') or ACTIVATION_TIME ('{ACTIVATION_TIME}'): {e}")
+            raise
+
+    def _calculate_target_dt(self):
+        """Calculates the target activation datetime in Rome time."""
+        try:
+            # Combine target date with activation time string
+            # activation_naive = datetime.strptime(f"{TARGET_DATE} {ACTIVATION_TIME}", "%Y-%m-%d %H:%M:%S")
+            activation_naive = datetime.strptime(f"{TARGET_DATE} {TARGET_TIME}", "%Y-%m-%d %H:%M:%S")
+            # Localize to Rome timezone
+            return self.rome_tz.localize(activation_naive)
+        except ValueError as e:
+            logging.critical(f"Error parsing TARGET_DATE ('{TARGET_DATE}') or ACTIVATION_TIME ('{TARGET_TIME}'): {e}")
             raise
 
     def setup_driver(self):
@@ -375,12 +428,13 @@ class ColosseumTicketBot:
             logging.error(f"Error loading URL {url}: {e}")
             return False
 
-        print("-" * 60)
+        logging.warning("-" * 60)
         logging.warning(">>> ACTION REQUIRED: Check browser NOW!")
         logging.warning(">>> 1. Solve any CAPTCHA / Cloudflare checks IMMEDIATELY.")
         logging.warning(">>> 2. Wait for main ticket selection elements to appear.")
-        input(">>> 3. Once page seems ready, press Enter here FAST...")
-        print("-" * 60)
+        logging.warning(">>> 3. Once page seems ready, press Enter here FAST...")
+        input("")
+        logging.warning("-" * 60)
         logging.info("Resuming automation...")
 
         # Quick check if the primary container is visible after manual step
@@ -613,8 +667,6 @@ class ColosseumTicketBot:
 
                     # VERY quick check for container presence immediately after reload
                     # Don't wait long here, just see if it appeared *instantly*
-                    # Introduced this switch, since I get an error if performing the quick check ("Container found during micro-refresh, but disappeared or timed out confirming visibility")
-                    #  if AFTER_REFRESH_IMMEDIATE_CHECK:
                     if self.quick_check_element(By.CSS_SELECTOR, PRIMARY_CONTAINER_SELECTOR, timeout=0.1):
                         logging.info(f"Primary container FOUND during micro-refresh at {now_dt.strftime('%H:%M:%S.%f')[:-3]}!")
                         container_found = True
@@ -691,82 +743,93 @@ class ColosseumTicketBot:
         # === Step 3: Execute Micro-Refresh Loop ===
         container_ready = self.micro_refresh_loop()
 
-        if not container_ready:
-            logging.error("Micro-refresh sequence completed but primary container not found. Aborting attempt.")
-            self.save_screenshot("debug_container_not_found_after_microrefresh")
-            return False
+        while True:
 
-        # === Step 4: Fast Ticket Check Loop ===
-        logging.info("=== STARTING FAST CHECK LOOP ===")
-        self.attempt_count = 0
-        start_fast_loop_time = time.perf_counter()
-        max_loop_duration = MAX_FAST_CHECK_ATTEMPTS * FAST_CHECK_INTERVAL + 5 # Add buffer time
+            if not container_ready:
+                logging.error("Micro-refresh sequence completed but primary container not found. Aborting attempt.")
+                self.save_screenshot("debug_container_not_found_after_microrefresh")
+                # return False
+                container_found = False
+            else:
+                container_found = True
 
-        while time.perf_counter() < start_fast_loop_time + max_loop_duration:
-            loop_start_perf = time.perf_counter()
-            self.attempt_count += 1
-            logging.debug(f"Fast Check Attempt {self.attempt_count}...")
+            if container_found:
+                # === Step 4: Fast Ticket Check Loop ===
+                logging.info("=== STARTING FAST CHECK LOOP ===")
+                self.attempt_count = 0
+                start_fast_loop_time = time.perf_counter()
+                max_loop_duration = MAX_FAST_CHECK_ATTEMPTS * FAST_CHECK_INTERVAL + 5 # Add buffer time
 
-            # --- Core Ticket Selection Logic ---
-            try:
-                # Step 4a: Select Time Slot (includes internal delay)
-                slot_selected = self.select_time_slot()
-                if not slot_selected:
-                    # If slots were expected but not found/clicked, pause and retry loop
-                    time.sleep(FAST_CHECK_INTERVAL)
-                    continue # Go to next attempt immediately
+                while time.perf_counter() < start_fast_loop_time + max_loop_duration:
+                    loop_start_perf = time.perf_counter()
+                    self.attempt_count += 1
+                    logging.debug(f"Fast Check Attempt {self.attempt_count}...")
 
-                # --- Slot Selected ---
-                logging.debug(f"Attempt {self.attempt_count}: Slot selected. Setting quantities...")
+                    # --- Core Ticket Selection Logic ---
+                    try:
+                        # Step 4a: Select Time Slot (includes internal delay)
+                        slot_selected = self.select_time_slot()
+                        if not slot_selected:
+                            # If slots were expected but not found/clicked, pause and retry loop
+                            time.sleep(FAST_CHECK_INTERVAL)
+                            continue # Go to next attempt immediately
 
-                # Step 4b: Set Ticket Quantities (includes internal delays)
-                quantities_set = self.set_ticket_quantities()
-                if not quantities_set:
-                    # If setting quantities failed, pause slightly longer and retry loop
-                    logging.warning(f"Attempt {self.attempt_count}: Failed to set quantities.")
-                    time.sleep(FAST_CHECK_INTERVAL * 1.5)
-                    # Consider a reload/refresh here if quantity setting fails consistently? Risky.
-                    continue
+                        # --- Slot Selected ---
+                        logging.debug(f"Attempt {self.attempt_count}: Slot selected. Setting quantities...")
 
-                # --- Quantities Set ---
-                logging.info(f"Attempt {self.attempt_count}: Quantities set! Clicking continue...")
+                        # Step 4b: Set Ticket Quantities (includes internal delays)
+                        quantities_set = self.set_ticket_quantities()
+                        if not quantities_set:
+                            # If setting quantities failed, pause slightly longer and retry loop
+                            logging.warning(f"Attempt {self.attempt_count}: Failed to set quantities.")
+                            time.sleep(FAST_CHECK_INTERVAL * 1.5)
+                            # Consider a reload/refresh here if quantity setting fails consistently? Risky.
+                            continue
 
-                # Step 4c: Click Continue/Checkout (includes internal delay)
-                continue_clicked = self.click_continue()
-                if not continue_clicked:
-                     logging.warning(f"Attempt {self.attempt_count}: Failed to click continue.")
-                     time.sleep(FAST_CHECK_INTERVAL * 1.5)
-                     # Maybe save screenshot on continue failure
-                     # self.save_screenshot(f"debug_continue_fail_attempt_{self.attempt_count}")
-                     continue
+                        # --- Quantities Set ---
+                        logging.info(f"Attempt {self.attempt_count}: Quantities set! Clicking continue...")
 
-                # == SUCCESS! ==
-                loop_end_perf = time.perf_counter()
-                logging.info(f"SUCCESS on Fast Check Attempt {self.attempt_count}! (Loop time: {loop_end_perf - loop_start_perf:.4f}s)")
-                logging.info(f"Total time from fast loop start: {loop_end_perf - start_fast_loop_time:.4f}s")
-                self.ticket_secured()
-                return True # Exit successfully
+                        # Step 4c: Click Continue/Checkout (includes internal delay)
+                        continue_clicked = self.click_continue()
+                        if not continue_clicked:
+                            logging.warning(f"Attempt {self.attempt_count}: Failed to click continue.")
+                            time.sleep(FAST_CHECK_INTERVAL * 1.5)
+                            # Maybe save screenshot on continue failure
+                            # self.save_screenshot(f"debug_continue_fail_attempt_{self.attempt_count}")
+                            continue
 
-            except StaleElementReferenceException:
-                 logging.warning(f"StaleElementReferenceException during fast check {self.attempt_count}. Retrying loop.")
-                 time.sleep(FAST_CHECK_INTERVAL / 2.0) # Very short pause before retry
-                 continue
-            except (TimeoutException, NoSuchElementException) as e_find:
-                 # These are expected if elements aren't ready yet
-                 logging.debug(f"Element not found/timed out in attempt {self.attempt_count}: {type(e_find).__name__}. Continuing check.")
-                 time.sleep(FAST_CHECK_INTERVAL)
-                 continue
-            except Exception as loop_e:
-                logging.error(f"Unhandled error during fast check {self.attempt_count}: {loop_e}", exc_info=True)
-                self.save_screenshot(f"debug_fast_loop_error_{self.attempt_count}")
-                time.sleep(FAST_CHECK_INTERVAL * 2) # Longer pause after unexpected error
-                continue
-            # --- End of Fast Loop Iteration ---
+                        # == SUCCESS! ==
+                        loop_end_perf = time.perf_counter()
+                        logging.info(f"SUCCESS on Fast Check Attempt {self.attempt_count}! (Loop time: {loop_end_perf - loop_start_perf:.4f}s)")
+                        logging.info(f"Total time from fast loop start: {loop_end_perf - start_fast_loop_time:.4f}s")
+                        self.ticket_secured()
+                        return True # Exit successfully
+
+                    except StaleElementReferenceException:
+                        logging.warning(f"StaleElementReferenceException during fast check {self.attempt_count}. Retrying loop.")
+                        time.sleep(FAST_CHECK_INTERVAL / 2.0) # Very short pause before retry
+                        continue
+                    except (TimeoutException, NoSuchElementException) as e_find:
+                        # These are expected if elements aren't ready yet
+                        logging.debug(f"Element not found/timed out in attempt {self.attempt_count}: {type(e_find).__name__}. Continuing check.")
+                        time.sleep(FAST_CHECK_INTERVAL)
+                        continue
+                    except Exception as loop_e:
+                        logging.error(f"Unhandled error during fast check {self.attempt_count}: {loop_e}", exc_info=True)
+                        self.save_screenshot(f"debug_fast_loop_error_{self.attempt_count}")
+                        time.sleep(FAST_CHECK_INTERVAL * 2) # Longer pause after unexpected error
+                        continue
+                    # --- End of Fast Loop Iteration ---
+
+            print('>>>>>>>>>>> Press Enter to retry')
+            input()
+
 
         # Loop finished without success
         logging.warning(f"Fast check loop completed {self.attempt_count} attempts without securing tickets.")
         self.save_screenshot("debug_fast_loop_timeout")
         return False
+
 
 
     def ticket_secured(self):
@@ -778,9 +841,10 @@ class ColosseumTicketBot:
         logging.info("="*60)
         # Add sound alert logic here if desired
         # ... (your winsound code) ...
-        print("-" * 60)
-        input(">>> Press Enter here ONLY after finishing/abandoning purchase...")
-        print("-" * 60)
+        logging.warning("-" * 60)
+        logging.warning(">>> Press Enter here ONLY after finishing/abandoning purchase...")
+        input("")
+        logging.warning("-" * 60)
 
     def save_screenshot(self, filename_prefix="debug_screenshot"):
         """Saves a screenshot, useful for debugging failures."""
@@ -826,9 +890,8 @@ if __name__ == "__main__":
     try:
         logging.info("="*60 + "\n Starting Optimized Ticket Bot \n" + "="*60)
         # Log key configurations
-        logging.info(f" Target Date: {TARGET_DATE}")
-        logging.info(f" Activation Date: {ACTIVATION_DATE}")
-        logging.info(f" Activation Time (Rome): {ACTIVATION_TIME}")
+        logging.info(f" Target Date: {TARGET_DATE}, Target Time: {TARGET_TIME}")
+        logging.info(f" Activation Date: {ACTIVATION_DATE}, Activation Time: {ACTIVATION_TIME}")
         logging.info(f" Desired Slot Match: '{bot.desired_slot_time_str}' ({PREFERRED_LANGUAGE})")
         logging.info(f" Tickets: {FULL_PRICE_TICKETS} Full / {REDUCED_PRICE_TICKETS} Reduced")
         logging.info(f" Micro-Refresh: Lead={MICRO_REFRESH_LEAD_TIME_SECONDS}s, Window={MICRO_REFRESH_DURATION_BEFORE}s+{MICRO_REFRESH_DURATION_AFTER}s, Interval={MICRO_REFRESH_INTERVAL*1000:.0f}ms")
